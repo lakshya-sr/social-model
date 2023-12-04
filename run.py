@@ -22,10 +22,8 @@ def network_portrayal(G):
         }
         for (_, agents) in G.nodes.data("agent")
     ]
-    print(portrayal["nodes"][0]["color"])
     portrayal["edges"] = [ {"source": source, "target": target, "color": "grey", "width": 1} for (source, target) in G.edges]
     
-
     return portrayal
  
 

@@ -6,6 +6,7 @@ import math
 import pickle
 import time
 import mesa
+from multiprocessing import Pool
 
 
 like_threshold = 4
@@ -51,8 +52,9 @@ def moving_average(data, window_width):
         data_final[i-window_width] = sum(window)/(2*window_width)
     return data_final
 
-def num_clusters(data):
-    data = sorted(data, key=lambda x: x.opinion)
+def num_clusters(model):
+    data = [p.opinion for p in model.schedule.agents]
+    data.sort()
     max_consecutive_dist = 0
     for i in range(len(data)-1):
         max_consecutive_dist = data[i]-data[i+1] if data[i]-data[i+1] > max_consecutive_dist else max_consecutive_dist
@@ -192,7 +194,8 @@ class Person(mesa.Agent):
         post.likes += 1
         self.history.append((LIKE, post))
 
-    
+
+
 class AlgorithmRandom():
     def __init__(self):
         pass
@@ -227,3 +230,84 @@ class AlgorithmSimilarity():
             return random.sample(final, n)
         else:
             return final
+
+class MultithreadedBaseScheduler(mesa.time.BaseScheduler):
+    def __init__(self, model, num_threads):
+        super().__init__(model)
+        self.model = model
+        self.pool = Pool(num_threads)
+
+    def on_each(self, method):
+        for agent_key in self.get_agent_keys():
+            f = getattr(self._agents[agent_key], method)
+            self.pool.apply_async(f)
+
+class SocialNetworkBatchModel(mesa.Model):
+    def __init__(self, num_threads, configs):
+        self.schedule = MultithreadedBaseScheduler(self, num_threads)
+        self.variables = []
+        self.num_agents = 0
+        self.datacollector = mesa.DataCollector()
+        for k,v in configs.items():
+            if type(v) == list:
+                self.variables.append(k)
+
+        config = {}
+        if len(self.variables) > 2:
+            print("Too many variable parameters")
+            return
+        elif len(self.variables) == 2:
+            self.grid = mesa.space.SingleGrid(len(configs[self.variables[0]]), len(configs[self.variables[1]]), False)
+            for i in range(len(configs[self.variables[0]])):
+                for j in range(len(configs[self.variables[1]])):
+                    for k,v in configs.items():
+                        if k in self.variables:
+                            config[k] = configs[k][i if self.variables.index(k) == 1 else j]
+                        else:
+                            config[k] = v
+                    s = SocialNetworkAgent(self.num_agents, self, config)
+                    self.schedule.add(s)
+                    self.grid.place_agent(s, (i,j))
+                    self.num_agents += 1
+        elif len(self.variables) == 1:
+            self.grid = mesa.space.SingleGrid(len(configs[self.variables[0]]), 0, False)
+            for i in range(len(configs[self.variables[0]])):
+                for k,v in configs.items():
+                    if k in self.variables:
+                        config[k] = configs[k][i]
+                    else:
+                        config[k] = v
+                s = SocialNetworkAgent(self.num_agents, self, config)
+                self.schedule.add(s)
+                self.grid.place_agent(s, (i,0))
+                self.num_agents += 1
+
+    def step(self):
+        self.schedule.step()
+
+
+class SocialNetworkAgent(mesa.Agent):
+    def __init__(self, unique_id, model, config):
+        self.m = SocialNetwork(config["num_persons"],
+                                   config["influence_factor"],
+                                   config["d_1"],
+                                   config["d_2"],
+                                   config["posting_prob"],
+                                   config["recommendation_post_num"],
+                                   config["graph_degree"],
+                                   config["collect_data"],
+                                   config["G"],
+                                   config["influence_function"],
+                                   config["recommendation_algorithm"]
+                                  )
+        self.unique_id = unique_id
+        self.model = model
+        self.stats = None
+
+    def step(self):
+        print(f"Stepped {self.unique_id}")
+        self.m.step()
+        self.collect_stats(self.model)
+
+    def collect_stats(self, model):
+        pass
