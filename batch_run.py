@@ -5,7 +5,16 @@ import mesa, colormap
 
 
 def agent_portrayal(a):
-    portrayal = {"Color" : "red", "Layer":0}
+    c = colormap.Colormap()
+    cmap = c.cmap_linear("red", "yellow", "green")
+    
+    color = colormap.rgb2hex(*cmap((a.m.average_opinion()+1)/2))
+    portrayal = {"Color" : color,
+                 "Layer":0,
+                 "Shape": "rect", 
+                 "Filled": "true", 
+                 "w": 1, "h": 1, 
+                 "tooltip": f"{a.m.d_1:.3f}, {a.m.influence_factor:.3f}"}
     return portrayal
  
 if __name__ == "__main__":
@@ -47,5 +56,5 @@ if __name__ == "__main__":
         "Social Model",
         model_params,
     )
-    server.port = 8011
+    server.port = 8000
     server.launch(open_browser=True)

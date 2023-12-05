@@ -247,7 +247,7 @@ class SocialNetworkBatchModel(mesa.Model):
         self.schedule = MultithreadedBaseScheduler(self, num_threads)
         self.variables = []
         self.num_agents = 0
-        self.datacollector = mesa.DataCollector()
+        self.datacollector = mesa.DataCollector({}, {"Average opinion" : "m.average_opinion"})
         for k,v in configs.items():
             if type(v) == list:
                 self.variables.append(k)
@@ -305,7 +305,7 @@ class SocialNetworkAgent(mesa.Agent):
         self.stats = None
 
     def step(self):
-        print(f"Stepped {self.unique_id}")
+        # print(f"Stepped {self.unique_id}")
         self.m.step()
         self.collect_stats(self.model)
 
