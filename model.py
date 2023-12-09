@@ -1,12 +1,9 @@
 from collections import deque
 import networkx as nx
-import random
-import utils
-import math
-import pickle
-import time
+import random, math, pickle, time, copy
 import mesa
 from multiprocessing import Pool
+import utils
 
 
 like_threshold = 4
@@ -59,16 +56,10 @@ def num_clusters(model):
     for i in range(len(data)-1):
         max_consecutive_dist = data[i]-data[i+1] if data[i]-data[i+1] > max_consecutive_dist else max_consecutive_dist
     return max_consecutive_dist
-        
-    
 
+def linear_interest(person_opinion, post_opinion, person_history):
+    return abs(person_opinion-post_opinion)
 
-def interest(person_opinion, post_opinion):
-    diff = abs(person_opinion-post_opinion)
-    a = 1.1
-    x_0 = 1
-    k = 5
-    return (-1/(math.e**(-k*(diff-x_0))))+0.5
 
 
 class SocialNetwork(mesa.Model):
@@ -81,8 +72,10 @@ class SocialNetwork(mesa.Model):
                        graph_degree=3, 
                        collect_data=True, 
                        G=None, 
-                       influence_function=bounded_confidence,
-                       recommendation_algorithm=None):
+                       influence_function=None,
+                       recommendation_algorithm=None,
+                       interest_function=None):
+        
         self.posts = []
 
         self.num_persons = num_persons
@@ -90,11 +83,11 @@ class SocialNetwork(mesa.Model):
         self.posting_prob = posting_prob
         self.recommendation_post_num = recommendation_post_num
         self.collect_data = collect_data
-        self.influence = influence_function
-
-        self.algorithm = recommendation_algorithm() if recommendation_algorithm else AlgorithmRandom()
-        self.datacollector = mesa.DataCollector({"Average Opinion": self.average_opinion, "Cluster": num_clusters})
-        self.G = G if G else nx.gnp_random_graph(self.num_persons, graph_degree/self.num_persons, directed=True)
+        self.influence = eval(influence_function) if influence_function else bounded_confidence
+        self.interest = eval(interest_function) if interest_function else linear_interest
+        
+        self.datacollector = mesa.DataCollector({"Average Opinion": self.average_opinion, "Opinion": lambda m: [p.opinion for p in m.schedule.agents]})
+        self.G = utils.generate_graph(G, num_persons, graph_degree) if G else nx.gnp_random_graph(self.num_persons, graph_degree/self.num_persons, directed=True)
         self.network = mesa.space.NetworkGrid(self.G)
         self.schedule = mesa.time.RandomActivation(self)
 
@@ -105,6 +98,9 @@ class SocialNetwork(mesa.Model):
 
         for p in self.schedule.agents:
             p.create_post()
+        
+        self.interest_matrix = {person:{post:0 for post in self.posts} for person in self.schedule.agents}
+        self.algorithm = eval(f"{recommendation_algorithm}(self.interest_matrix)") if recommendation_algorithm else AlgorithmRandom(self.interest_matrix)
         
     def step(self):
         self.schedule.step()
@@ -150,20 +146,18 @@ class Person(mesa.Agent):
 
     def step(self):
         self.feed.extend(self.model.algorithm.select_posts(self, self.model.posts, self.model.recommendation_post_num))
-        if len(self.feed) > 0:
-            p = random.choice(self.feed)
-            if p: self.feed.remove(p)
-            
-            if type(p) == Post:
+        for _ in range(1):
+            if len(self.feed) > 0:
+                p = random.choice(self.feed)
+                self.feed.remove(p)
+                
                 opinion_delta, confidence_delta = self.model.influence(self.opinion, p.opinion, self.confidence, p.confidence, self.model.influence_factor)
                 self.opinion = utils.clamp(self.opinion + opinion_delta, -1, 1)
                 self.confidence = utils.clamp(self.confidence + confidence_delta, -1, 1)
+                self.model.interest_matrix[self][p] = self.model.interest(self.opinion, p.opinion, self.history)
 
-                
         if random.random() < self.model.posting_prob:
-            self.create_post()
-        pass
-        
+            self.create_post()        
 
     def create_post(self):
         post = Post(random.uniform(self.opinion-post_opinion_delta, self.opinion+post_opinion_delta), self, self.model.d_2 if self.model.influence == bounded_confidence_repulsion else self.confidence)
@@ -197,18 +191,15 @@ class Person(mesa.Agent):
 
 
 class AlgorithmRandom():
-    def __init__(self):
+    def __init__(self, interest_matrix):
         pass
 
-    def select_persons(self, target, persons, n):
-        return random.sample(persons, n)
-    
     def select_posts(self, target, posts, n):
         return random.sample(posts, n)
 
 
 class AlgorithmSimilarity():
-    def __init__(self):
+    def __init__(self, interest_matrix):
         pass
 
     def select_posts(self, target, posts, n):
@@ -231,6 +222,15 @@ class AlgorithmSimilarity():
         else:
             return final
 
+class AlgorithmCollaborativeFiltering:
+    def __init__(self, interest_matrix):
+        self.real_matrix = interest_matrix
+        self.predicted_matrix = copy.deepcopy(interest_matrix)
+
+    def recommend_posts(self, person, posts, n):
+        pass
+
+    
 class MultithreadedBaseScheduler(mesa.time.BaseScheduler):
     def __init__(self, model, num_threads):
         super().__init__(model)
