@@ -15,7 +15,7 @@ class HistogramModule(VisualizationElement):
         new_element = new_element.format([round(-1 + i*2/bins, 2) for i in range(bins)],
                                          canvas_width, 
                                          canvas_height)
-        self.js_code = "elements.push(" + new_element + ");"
+        self.js_code = "elements.push(" + new_element + ");" 
 
     def render(self, model):
         self.data = model.datacollector.model_vars[self.label][-1] if len(model.datacollector.model_vars[self.label]) > 0 else []

@@ -51,12 +51,18 @@ def moving_average(data, window_width):
 
 def num_clusters(model):
     data = [p.opinion for p in model.schedule.agents]
+    clusters = 1
     data.sort()
-    max_consecutive_dist = 0
-    for i in range(len(data)-1):
-        max_consecutive_dist = data[i]-data[i+1] if data[i]-data[i+1] > max_consecutive_dist else max_consecutive_dist
-    return max_consecutive_dist
-
+    min_avg_distance = model.cluster_min_dist
+    differences = [data[i]-data[i-1] for i in range(1,len(data))]
+    avg_dist = max(min_avg_distance, sum(differences)/len(differences))
+    for o in data:
+        if o > avg_dist:
+            clusters += 1
+    return clusters
+    
+    
+ 
 def linear_interest(person_opinion, post_opinion, person_history):
     return abs(person_opinion-post_opinion)
 
@@ -70,6 +76,7 @@ class SocialNetwork(mesa.Model):
                        posting_prob=0, 
                        recommendation_post_num=2, 
                        graph_degree=3, 
+                       cluster_min_dist=0.3,
                        collect_data=True, 
                        G=None, 
                        influence_function=None,
@@ -83,10 +90,13 @@ class SocialNetwork(mesa.Model):
         self.posting_prob = posting_prob
         self.recommendation_post_num = recommendation_post_num
         self.collect_data = collect_data
+        self.cluster_min_dist = cluster_min_dist
         self.influence = eval(influence_function) if influence_function else bounded_confidence
         self.interest = eval(interest_function) if interest_function else linear_interest
         
-        self.datacollector = mesa.DataCollector({"Average Opinion": self.average_opinion, "Opinion": lambda m: [p.opinion for p in m.schedule.agents]})
+        self.datacollector = mesa.DataCollector({"Average Opinion": self.average_opinion,
+                                                 "Clusters": num_clusters,
+                                                 "Opinion": lambda m: [p.opinion for p in m.schedule.agents]})
         self.G = utils.generate_graph(G, num_persons, graph_degree) if G else nx.gnp_random_graph(self.num_persons, graph_degree/self.num_persons, directed=True)
         self.network = mesa.space.NetworkGrid(self.G)
         self.schedule = mesa.time.RandomActivation(self)
@@ -100,7 +110,9 @@ class SocialNetwork(mesa.Model):
             p.create_post()
         
         self.interest_matrix = {person:{post:0 for post in self.posts} for person in self.schedule.agents}
-        self.algorithm = eval(f"{recommendation_algorithm}(self.interest_matrix)") if recommendation_algorithm else AlgorithmRandom(self.interest_matrix)
+        self.pair_dist = nx.all_pairs_shortest_path_length(self.G)
+        algorithm_config = utils.get_algorithm_config(recommendation_algorithm, self.G, self.interest_matrix, self.pair_dist)
+        self.algorithm = eval(f"{recommendation_algorithm}(algorithm_config)") if recommendation_algorithm else AlgorithmRandom(self.interest_matrix)
         
     def step(self):
         self.schedule.step()
@@ -145,7 +157,7 @@ class Person(mesa.Agent):
         self.followers = []
 
     def step(self):
-        self.feed.extend(self.model.algorithm.select_posts(self, self.model.posts, self.model.recommendation_post_num))
+        self.feed.extend(self.model.algorithm.recommend_posts(self, self.model.posts, self.model.recommendation_post_num))
         for _ in range(1):
             if len(self.feed) > 0:
                 p = random.choice(self.feed)
@@ -191,18 +203,18 @@ class Person(mesa.Agent):
 
 
 class AlgorithmRandom():
-    def __init__(self, interest_matrix):
+    def __init__(self, config):
         pass
 
-    def select_posts(self, target, posts, n):
+    def recommend_posts(self, target, posts, n):
         return random.sample(posts, n)
 
 
 class AlgorithmSimilarity():
-    def __init__(self, interest_matrix):
+    def __init__(self, config):
         pass
 
-    def select_posts(self, target, posts, n):
+    def recommend_posts(self, target, posts, n):
         selected = []
         idx = 0
         for p in posts:
@@ -223,21 +235,42 @@ class AlgorithmSimilarity():
             return final
 
 class AlgorithmCollaborativeFiltering:
-    def __init__(self, interest_matrix):
-        self.real_matrix = interest_matrix
-        self.predicted_matrix = copy.deepcopy(interest_matrix)
+    def __init__(self, config):
+        self.real_matrix = config["interest_matrix"]
 
     def recommend_posts(self, person, posts, n):
-        pass
+        distances = [(p, self.person_distance(person, p)) for p in self.real_matrix]
+        distances = sorted(distances, key=lambda x:x[1])
+        distances = {i[0]:i[1] for i in distances}
+        avg_opinions = {p:sum(self.real_matrix[p].values())/len(self.real_matrix[p]) for p in self.real_matrix}
+        distance_weighted_avg = sum([avg_opinions[p]*distances[p] for p in self.real_matrix])/sum(distances.values())
+        post_dist = [(post, abs(post.opinion-distance_weighted_avg)) for post in posts]
+        post_dist = sorted(post_dist, key=lambda x: x[1])
+        selected = [i[0] for i in post_dist]
+        
+        return selected[:n]
+        
+    def person_distance(self, person1, person2):
+        return abs(person1.opinion-person2.opinion)
 
-    
+class AlgorithmProximity():
+    def __init__(self, config):
+        self.pair_dist = dict(config["pair_dist"])
+        print(self.pair_dist)
+        
+
+    def recommend_posts(self, person, posts, n):
+        posts = sorted(posts, key=lambda p:self.pair_dist[person.unique_id][p.creator.unique_id] if p.creator in self.pair_dist[person.unique_id] else 0)
+        return posts[:n]
+
+
 class MultithreadedBaseScheduler(mesa.time.BaseScheduler):
     def __init__(self, model, num_threads):
         super().__init__(model)
         self.model = model
         self.pool = Pool(num_threads)
 
-    def on_each(self, method):
+    def on_each(self, method): 
         for agent_key in self.get_agent_keys():
             f = getattr(self._agents[agent_key], method)
             self.pool.apply_async(f)

@@ -33,14 +33,14 @@ chart = mesa.visualization.ChartModule(
         }
     ]
 )
-
-bar_chart = HistogramModule(20, "Opinion")
+clusters_chart = mesa.visualization.ChartModule([{"Label":"Clusters", "Color":"#00FF00"}])
+bar_chart = HistogramModule(40, "Opinion")
 
 
 model_params = {
     "num_persons": mesa.visualization.Slider(
         "Number of agents",
-        10,
+        50,
         10,
         100,
         1,
@@ -81,6 +81,9 @@ model_params = {
     "graph_degree": mesa.visualization.Slider(
         "Avg Node Degree", 3, 3, 8, 1, description="Avg Node Degree"
     ),
+    "cluster_min_dist": mesa.visualization.Slider(
+        "Cluster min dist", 0.3, 0, 2, 0.01
+    ),
     "G": mesa.visualization.Choice(
         "Network graph generator",
         value="gnp_random_graph",
@@ -93,8 +96,8 @@ model_params = {
     ),
     "recommendation_algorithm": mesa.visualization.Choice(
         "Recommendation algorithm",
-        value="AlgorithmRandom",
-        choices=["AlgorithmRandom", "AlgorithmSimilarity", "AlgorithmCollaborativeFiltering"]
+        value="AlgorithmProximity",
+        choices=["AlgorithmRandom", "AlgorithmSimilarity", "AlgorithmCollaborativeFiltering", "AlgorithmProximity"]
     ),
     "interest_function": mesa.visualization.Choice(
         "Interest function",
@@ -105,10 +108,10 @@ model_params = {
 
 server = mesa.visualization.ModularServer(
     SocialNetwork,
-    [network, chart, bar_chart],
+    [network, chart, bar_chart, clusters_chart],
     "Social Model",
     model_params,
 )
-server.port = 8001
+server.port = 8000
 
-server.launch(open_browser=True)
+server.launch(open_browser=False)

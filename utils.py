@@ -44,4 +44,11 @@ def generate_graph(graph_spec, num_persons, graph_degree, directed=True):
                         G.remove_edge(random.choice(G.edges))
                     return G
                     
-                    
+def get_algorithm_config(algorithm, G, interest_matrix, pair_dist):
+    config = {}
+    match algorithm:
+        case "AlgorithmCollaborativeFiltering":
+            config = {"interest_matrix": interest_matrix}
+        case "AlgorithmProximity":
+            config = {"pair_dist": pair_dist}
+    return config
