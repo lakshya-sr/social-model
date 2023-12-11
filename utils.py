@@ -27,28 +27,25 @@ def histogram(data, bins=20, x_range=(-1,1)):
     return hist_data
 
 def generate_graph(graph_spec, num_persons, graph_degree, directed=True):
-    match type(graph_spec):
-        case nx.DiGraph:
+    if type(graph_spec) == nx.DiGraph:
             return graph_spec
-        case str:
-            match graph_spec:
-                case "gnp_random_graph":
-                    return nx.gnp_random_graph(num_persons, graph_degree/num_persons, directed=directed)
+    elif type(graph_spec) == str:
+        if graph_spec == "gnp_random_graph":
+            return nx.gnp_random_graph(num_persons, graph_degree/num_persons, directed=directed)
                 
-                case "gnm_random_graph":
-                    return nx.gnm_random_graph(num_persons, graph_degree*num_persons, directed=directed)
+        elif graph_spec == "gnm_random_graph":
+            return nx.gnm_random_graph(num_persons, graph_degree*num_persons, directed=directed)
 
-                case "newman_watts_strogatz_graph":
-                    G = nx.newman_watts_strogatz_graph(num_persons, graph_degree, graph_degree/num_persons).to_directed()
-                    for _ in range(len(G.edges)//2):
-                        G.remove_edge(random.choice(G.edges))
-                    return G
+        elif graph_spec == "newman_watts_strogatz_graph":
+            G = nx.newman_watts_strogatz_graph(num_persons, graph_degree, graph_degree/num_persons).to_directed()
+            for _ in range(len(G.edges)//2):
+                G.remove_edge(random.choice(G.edges))
+            return G
                     
 def get_algorithm_config(algorithm, G, interest_matrix, pair_dist):
     config = {}
-    match algorithm:
-        case "AlgorithmCollaborativeFiltering":
-            config = {"interest_matrix": interest_matrix}
-        case "AlgorithmProximity":
-            config = {"pair_dist": pair_dist}
+    if algorithm == "AlgorithmCollaborativeFiltering":
+        config = {"interest_matrix": interest_matrix}
+    elif algorithm == "AlgorithmProximity":
+        config = {"pair_dist": pair_dist}
     return config
