@@ -53,11 +53,10 @@ def num_clusters(model):
     data = [p.opinion for p in model.schedule.agents]
     clusters = 1
     data.sort()
-    min_avg_distance = model.cluster_min_dist
     differences = [data[i]-data[i-1] for i in range(1,len(data))]
-    avg_dist = max(min_avg_distance, sum(differences)/len(differences))
-    for o in data:
-        if o > avg_dist:
+    avg_dist = max(model.cluster_min_dist, sum(differences)/len(differences))
+    for d in differences:
+        if d > avg_dist:
             clusters += 1
     return clusters
     
@@ -98,18 +97,30 @@ class SocialNetwork(mesa.Model):
                                                  "Clusters": num_clusters,
                                                  "Opinion": lambda m: [p.opinion for p in m.schedule.agents]})
         self.G = utils.generate_graph(G, num_persons, graph_degree) if G else nx.gnp_random_graph(self.num_persons, graph_degree/self.num_persons, directed=True)
+        
         self.network = mesa.space.NetworkGrid(self.G)
         self.schedule = mesa.time.RandomActivation(self)
+
+        self.persons = {}
 
         for i, node in enumerate(self.G.nodes()):
             a = Person(i, self)
             self.schedule.add(a)
             self.network.place_agent(a, node)
 
-        for p in self.schedule.agents:
-            p.create_post()
+        for a in self.schedule.agents:
+            self.persons[a.unique_id] = a
+            
+        for e in self.G.edges():
+            self.persons[e[0]].follow(self.persons[e[1]])
+
+
         
         self.interest_matrix = {person:{post:0 for post in self.posts} for person in self.schedule.agents}
+
+        for p in self.schedule.agents:
+            p.create_post()
+
         self.pair_dist = nx.all_pairs_shortest_path_length(self.G)
         algorithm_config = utils.get_algorithm_config(recommendation_algorithm, self.G, self.interest_matrix, self.pair_dist)
         self.algorithm = eval(f"{recommendation_algorithm}(algorithm_config)") if recommendation_algorithm else AlgorithmRandom(self.interest_matrix)
@@ -133,7 +144,7 @@ class SocialNetwork(mesa.Model):
     def average_opinion(self):
         return sum([p.opinion for p in self.schedule.agents])/self.num_persons
         
-class Post():
+class Post:
     def __init__(self, opinion, creator, confidence):
         self.opinion = opinion
         self.creator = creator
@@ -175,6 +186,8 @@ class Person(mesa.Agent):
         post = Post(random.uniform(self.opinion-post_opinion_delta, self.opinion+post_opinion_delta), self, self.model.d_2 if self.model.influence == bounded_confidence_repulsion else self.confidence)
         self.history.append((CREATE_POST, post))
         self.model.posts.append(post)
+        for p in self.model.interest_matrix:
+            self.model.interest_matrix[p][post] = 0
         return post
 
     def forward(self, person, post):
@@ -184,7 +197,8 @@ class Person(mesa.Agent):
 
     def follow(self, person):
         if person != self:
-            self.model.network.add_edge(self, person)
+            if not (self.unique_id, person.unique_id) in self.model.G.edges():
+                self.model.G.add_edge(self.unique_id, person.unique_id)
             person.followers.append(self)
             self.history.append((FOLLOW, person))
 
@@ -202,15 +216,17 @@ class Person(mesa.Agent):
 
 
 
-class AlgorithmRandom():
+class AlgorithmRandom:
     def __init__(self, config):
         pass
 
-    def recommend_posts(self, target, posts, n):
-        return random.sample(posts, n)
+    def recommend_posts(self, person, posts, n):
+        recommended = random.sample(posts, len(posts))
+        final = [p for p in recommended if p.creator != person]
+        return final[:n]
 
 
-class AlgorithmSimilarity():
+class AlgorithmSimilarity:
     def __init__(self, config):
         pass
 
@@ -234,6 +250,16 @@ class AlgorithmSimilarity():
         else:
             return final
 
+class AlgorithmPopularity:
+    def __init__(self, config):
+        pass
+
+    def recommend_posts(self, person, posts, n):
+        recommended = sorted(posts, key=lambda p: len(p.creator.followers))
+        final = [p for p in recommended if p.creator != person]
+        
+        return final[:n]
+        
 class AlgorithmCollaborativeFiltering:
     def __init__(self, config):
         self.real_matrix = config["interest_matrix"]
@@ -247,22 +273,40 @@ class AlgorithmCollaborativeFiltering:
         post_dist = [(post, abs(post.opinion-distance_weighted_avg)) for post in posts]
         post_dist = sorted(post_dist, key=lambda x: x[1])
         selected = [i[0] for i in post_dist]
+        final = [p for p in selected if p.creator != person]
         
-        return selected[:n]
+        return final[:n]
         
     def person_distance(self, person1, person2):
         return abs(person1.opinion-person2.opinion)
 
-class AlgorithmProximity():
+class AlgorithmProximity:
     def __init__(self, config):
-        self.pair_dist = dict(config["pair_dist"])
-        print(self.pair_dist)
-        
+        self.pair_dist = dict(config["pair_dist"])     
 
     def recommend_posts(self, person, posts, n):
-        posts = sorted(posts, key=lambda p:self.pair_dist[person.unique_id][p.creator.unique_id] if p.creator in self.pair_dist[person.unique_id] else 0)
-        return posts[:n]
+        recommended = sorted(posts, key=lambda p:self.pair_dist[person.unique_id][p.creator.unique_id] if p.creator in self.pair_dist[person.unique_id] else 0)
+        final = [p for p in recommended if p.creator != person]
+        return final[:n]
 
+class AlgorithmHybrid:
+    def __init__(self, config):
+        self.pair_dist = dict(config["pair_dist"])
+        self.interest_matrix = config["interest_matrix"]
+
+    def recommend_posts(self, person, posts, n):
+        similarity = [abs(person.opinion-p.opinion) for p in posts]
+        dist = [self.pair_dist[person.unique_id][p.creator.unique_id] if person.unique_id in self.pair_dist.keys() and p.creator.unique_id in self.pair_dist[person.unique_id].keys() else math.inf for p in posts]
+        likeness = [self.interest_matrix[person][p] for p in posts]
+        popularity = [len(p.creator.followers) for p in posts]
+        score = {p:self.calc_score(similarity[i], dist[i], likeness[i], popularity[i]) for i,p in enumerate(posts)}
+        recommended = sorted(posts, key=lambda p:score[p], reverse=True)
+        final = [p for p in recommended if p.creator != person][:n*n]
+        random.shuffle(final)
+        return final[:n]
+
+    def calc_score(self, similarity, distance, likeness, popularity):
+        return similarity*0.1 + (1/distance if distance > 0 else 1) + likeness + popularity
 
 class MultithreadedBaseScheduler(mesa.time.BaseScheduler):
     def __init__(self, model, num_threads):
@@ -321,17 +365,17 @@ class SocialNetworkBatchModel(mesa.Model):
 
 class SocialNetworkAgent(mesa.Agent):
     def __init__(self, unique_id, model, config):
-        self.m = SocialNetwork(config["num_persons"],
-                                   config["influence_factor"],
-                                   config["d_1"],
-                                   config["d_2"],
-                                   config["posting_prob"],
-                                   config["recommendation_post_num"],
-                                   config["graph_degree"],
-                                   config["collect_data"],
-                                   config["G"],
-                                   config["influence_function"],
-                                   config["recommendation_algorithm"]
+        self.m = SocialNetwork(num_persons = config["num_persons"],
+                                   influence_factor = config["influence_factor"],
+                                   d_1 = config["d_1"],
+                                   d_2 = config["d_2"],
+                                   posting_prob = config["posting_prob"],
+                                   recommendation_post_num = config["recommendation_post_num"],
+                                   graph_degree = config["graph_degree"],
+                                   collect_data = config["collect_data"],
+                                   G = config["G"],
+                                   influence_function = config["influence_function"],
+                                   recommendation_algorithm = config["recommendation_algorithm"]
                                   )
         self.unique_id = unique_id
         self.model = model

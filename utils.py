@@ -41,6 +41,7 @@ def generate_graph(graph_spec, num_persons, graph_degree, directed=True):
             for _ in range(len(G.edges)//2):
                 G.remove_edge(random.choice(G.edges))
             return G
+    
                     
 def get_algorithm_config(algorithm, G, interest_matrix, pair_dist):
     config = {}
@@ -48,4 +49,6 @@ def get_algorithm_config(algorithm, G, interest_matrix, pair_dist):
         config = {"interest_matrix": interest_matrix}
     elif algorithm == "AlgorithmProximity":
         config = {"pair_dist": pair_dist}
+    elif algorithm == "AlgorithmHybrid":
+        config = {"pair_dist":pair_dist, "interest_matrix":interest_matrix}
     return config

@@ -96,8 +96,8 @@ model_params = {
     ),
     "recommendation_algorithm": mesa.visualization.Choice(
         "Recommendation algorithm",
-        value="AlgorithmProximity",
-        choices=["AlgorithmRandom", "AlgorithmSimilarity", "AlgorithmCollaborativeFiltering", "AlgorithmProximity"]
+        value="AlgorithmHybrid",
+        choices=["AlgorithmRandom", "AlgorithmSimilarity", "AlgorithmCollaborativeFiltering", "AlgorithmProximity", "AlgorithmHybrid", "AlgorithmPopularity"]
     ),
     "interest_function": mesa.visualization.Choice(
         "Interest function",
