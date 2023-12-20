@@ -3,6 +3,7 @@ import mesa, colormap
 from model import *
 import networkx as nx
 from HistogramModule import HistogramModule
+import sys
 
 def network_portrayal(G):
 
@@ -25,22 +26,36 @@ def network_portrayal(G):
     
     return portrayal
 
+config = {}
+if len(sys.argv) == 2:
+    with open(sys.argv[1], "rb") as f:
+        config = pickle.load(f)
+else:
+    config = {"num_persons":50,
+              "influence_factor":0.1,
+              "d_1":0.2,
+              "posting_prob":0.2,
+              "recommendation_post_num":2,
+              "graph_degree":3,
+              "cluster_min_dist":0.3,
+              "G":"random_internet_as_graph",
+              "influence_function":"bounded_confidence",
+              "recommendation_algorithm":"AlgorithmProximityRandom",
+              "interest_function":"linear_interest",
+              }
+        
+
 network = mesa.visualization.NetworkModule(network_portrayal, 500, 500)
-chart = mesa.visualization.ChartModule(
-    [
-        {"Label": "Average Opinion",
-         "Color": "#FF0000"
-        }
-    ]
-)
+chart = mesa.visualization.ChartModule([{"Label": "Average Opinion", "Color": "#FF0000"}])
 clusters_chart = mesa.visualization.ChartModule([{"Label":"Clusters", "Color":"#00FF00"}])
 bar_chart = HistogramModule(40, "Opinion")
+
 
 
 model_params = {
     "num_persons": mesa.visualization.Slider(
         "Number of agents",
-        50,
+        config["num_persons"],
         10,
         100,
         1,
@@ -48,7 +63,7 @@ model_params = {
     ),
     "influence_factor": mesa.visualization.Slider(
         "Influence factor",
-        0.1,
+        config["influence_factor"],
         0,
         1,
         0.01,
@@ -56,7 +71,7 @@ model_params = {
     ),
     "d_1": mesa.visualization.Slider(
         "Confidence bound",
-        0.2,
+        config["d_1"],
         0,
         1,
         0.01,
@@ -64,7 +79,7 @@ model_params = {
     ),
     "posting_prob": mesa.visualization.Slider(
         "Posting probability",
-        0.2,
+        config["posting_prob"],
         0,
         1,
         0.01,
@@ -72,43 +87,50 @@ model_params = {
     ),
     "recommendation_post_num": mesa.visualization.Slider(
         "No. of recommended posts",
-        2,
+        config["recommendation_post_num"],
         0,
         10,
         1,
         description="No of posts that are recommended in a step"
     ),
     "graph_degree": mesa.visualization.Slider(
-        "Avg Node Degree", 3, 3, 8, 1, description="Avg Node Degree"
+        "Avg Node Degree", config["graph_degree"], 3, 8, 1, description="Avg Node Degree"
     ),
     "cluster_min_dist": mesa.visualization.Slider(
-        "Cluster min dist", 0.3, 0, 2, 0.01
+        "Cluster min dist", config["cluster_min_dist"], 0, 2, 0.01
     ),
     "G": mesa.visualization.Choice(
         "Network graph generator",
-        value="gnp_random_graph",
-        choices=["gnp_random_graph", "gnm_random_graph", "newman_watts_strogatz_graph"]
+        value=config["G"],
+        choices=["gnp_random_graph", "gnm_random_graph", "newman_watts_strogatz_graph", "random_internet_as_graph"]
     ),
     "influence_function": mesa.visualization.Choice(
         "Influence function",
-        value="bounded_confidence",
+        value=config["influence_function"],
         choices=["bounded_confidence", "relative_agreement", "gaussian_bounded_confidence"]
     ),
     "recommendation_algorithm": mesa.visualization.Choice(
         "Recommendation algorithm",
-        value="AlgorithmHybrid",
-        choices=["AlgorithmRandom", "AlgorithmSimilarity", "AlgorithmCollaborativeFiltering", "AlgorithmProximity", "AlgorithmHybrid", "AlgorithmPopularity"]
+        value=config["recommendation_algorithm"],
+        choices=["AlgorithmRandom", 
+                 "AlgorithmSimilarity", 
+                 "AlgorithmCollaborativeFiltering", 
+                 "AlgorithmProximity", 
+                 "AlgorithmHybrid", 
+                 "AlgorithmPopularity", 
+                 "AlgorithmPopularityProximity",
+                 "AlgorithmProximityRandom"]
     ),
     "interest_function": mesa.visualization.Choice(
         "Interest function",
-        value="linear_interest",
+        value=config["interest_function"],
         choices=["linear_interest"]
     )
 }
 
 server = mesa.visualization.ModularServer(
     SocialNetwork,
-    [network, chart, bar_chart, clusters_chart],
+    [network, chart, bar_chart],
     "Social Model",
     model_params,
 )

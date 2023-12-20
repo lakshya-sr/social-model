@@ -31,8 +31,6 @@ if __name__ == "__main__":
         ]
     )
 
-
-
     model_params = {
         "num_threads": mesa.visualization.Slider(
             "No of threads to execute models", 

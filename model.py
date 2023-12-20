@@ -257,8 +257,26 @@ class AlgorithmPopularity:
     def recommend_posts(self, person, posts, n):
         recommended = sorted(posts, key=lambda p: len(p.creator.followers))
         final = [p for p in recommended if p.creator != person]
-        
         return final[:n]
+
+class AlgorithmProximityRandom:
+    def __init__(self, config):
+        pass
+
+    def recommend_posts(self, person, posts, n):
+        neighbors = person.model.network.get_neighbors(person.unique_id)
+        posts = [p for p in posts if p.creator.unique_id in neighbors]
+        return random.sample(posts, n) if len(posts) > n else posts
+        
+class AlgorithmPopularityProximity:
+    def __init__(self, config):
+        pass
+
+    def recommend_posts(self, person, posts, n):
+        neighbors = person.model.network.get_neighbors(person.unique_id)
+        posts = [p for p in posts if p.creator in neighbors]
+        recommended = sorted(posts, key=lambda p:len(p.creator.followers), reverse=True)
+        return recommended[:n]
         
 class AlgorithmCollaborativeFiltering:
     def __init__(self, config):
@@ -307,6 +325,7 @@ class AlgorithmHybrid:
 
     def calc_score(self, similarity, distance, likeness, popularity):
         return similarity*0.1 + (1/distance if distance > 0 else 1) + likeness + popularity
+
 
 class MultithreadedBaseScheduler(mesa.time.BaseScheduler):
     def __init__(self, model, num_threads):

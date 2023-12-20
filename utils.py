@@ -1,4 +1,4 @@
-import random
+import random, pickle
 import networkx as nx
 
 def clamp(x, minv, maxv):
@@ -41,6 +41,22 @@ def generate_graph(graph_spec, num_persons, graph_degree, directed=True):
             for _ in range(len(G.edges)//2):
                 G.remove_edge(random.choice(G.edges))
             return G
+            
+        elif graph_spec == "random_internet_as_graph":
+            g = nx.random_internet_as_graph(num_persons)
+            if directed:
+                directed_g = g.to_directed()
+                for n in directed_g.nodes:
+                    if len(directed_g.adj[n]) == 1:
+                        for n2 in directed_g.adj[n]: 
+                            directed_g.remove_edge(n2,n)
+                return directed_g
+            else:
+                return g
+            
+        elif graph_spec.contains(".graph"):
+            with open(graph_spec, "rb") as f:
+                return pickle.load(f)
     
                     
 def get_algorithm_config(algorithm, G, interest_matrix, pair_dist):
