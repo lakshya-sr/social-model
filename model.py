@@ -166,6 +166,7 @@ class Person(mesa.Agent):
         self.opinion = random.uniform(-1, 1)
         self.confidence = self.model.d_1 if self.model.influence in [bounded_confidence, bounded_confidence_repulsion, gaussian_bounded_confidence] else random.uniform(-0.5, 0.5)
         self.followers = []
+        self.posting = False
 
     def step(self):
         self.feed.extend(self.model.algorithm.recommend_posts(self, self.model.posts, self.model.recommendation_post_num))
@@ -178,9 +179,10 @@ class Person(mesa.Agent):
                 self.opinion = utils.clamp(self.opinion + opinion_delta, -1, 1)
                 self.confidence = utils.clamp(self.confidence + confidence_delta, -1, 1)
                 self.model.interest_matrix[self][p] = self.model.interest(self.opinion, p.opinion, self.history)
-
+        self.posting = False
         if random.random() < self.model.posting_prob:
             self.create_post()        
+            self.posting = True
 
     def create_post(self):
         post = Post(random.uniform(self.opinion-post_opinion_delta, self.opinion+post_opinion_delta), self, self.model.d_2 if self.model.influence == bounded_confidence_repulsion else self.confidence)

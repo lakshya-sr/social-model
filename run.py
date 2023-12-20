@@ -16,14 +16,14 @@ def network_portrayal(G):
     portrayal = {}
     portrayal["nodes"] = [
         {
-            "size": 6,
+            "size": 9 if agents[0].posting else 6,
             "color": node_color(agents[0]),
             "tooltip": f"id: {agents[0].unique_id}<br>state: {agents[0].opinion}",
         }
         for (_, agents) in G.nodes.data("agent")
     ]
     portrayal["edges"] = [ {"source": source, "target": target, "color": "grey", "width": 1} for (source, target) in G.edges]
-    
+
     return portrayal
 
 config = {}
