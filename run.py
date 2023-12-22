@@ -40,7 +40,7 @@ else:
               "cluster_min_dist":0.3,
               "G":"random_internet_as_graph",
               "influence_function":"bounded_confidence",
-              "recommendation_algorithm":"AlgorithmProximityRandom",
+              "recommendation_algorithm":"AlgorithmRandom",
               "interest_function":"linear_interest",
               }
         
